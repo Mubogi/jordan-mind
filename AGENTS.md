@@ -107,4 +107,36 @@ to guessing word boundaries: it silently mangles multi-slot patterns like
 - 64 unit tests pass; `lintRelease` is clean.
 - Release APK: 77 MB (no model) / 624 MB (bundled), signed, `apksigner verify` OK.
 - Desktop `.deb` installs and the installed binary passes all 19 `--selftest` checks.
-- Windows `.exe`/`.msi` require the `windows-latest` CI job — `jpackage` cannot cross-compile.
+- Windows installer: built on Linux by `packaging/windows/build-windows-installer.sh`, and
+  independently by the `windows-latest` CI job via `jpackage`.
+
+## Packaging a Windows installer from Linux
+
+`jpackage` links a native launcher and a runtime image for the target OS, so it genuinely cannot
+cross-compile. That does not block Windows packaging: assemble the distribution by hand and wrap
+it in NSIS, which does run on Linux.
+
+`packaging/windows/build-windows-installer.sh` does exactly that:
+
+1. `:desktop:createReleaseDistributable` for the jars.
+2. Swap `skiko-awt-runtime-linux-x64` for `skiko-awt-runtime-windows-x64` from Maven Central.
+   Skip this and the app dies on startup with an `UnsatisfiedLinkError`.
+3. Drop in a Temurin 21 Windows JRE so the user needs no system Java.
+4. Compile `launcher.nsi` into `JordanMind.exe`, then `installer.nsi` into the setup executable.
+
+Gotchas:
+
+- Skiko ships the `.dll` inside the runtime jar, so extract it as well as copying the jar.
+- The launcher must set `-Dskiko.library.path` to the directory holding the DLL.
+- Verify without Windows: `7z x` the installer and run the payload's `java.exe` under Wine with
+  `--selftest`. Wine 10 runs the Temurin JRE and the app's headless self-test fine.
+- `apt-get install wine64` removed the system JDK in this environment once. If `java` vanishes,
+  reinstall `openjdk-21-jdk-headless`.
+
+## .gitignore trap
+
+Build-output rules must be anchored. An unanchored `build/` also matches the source package
+`app/src/main/java/com/jordanmind/agent/build/`, which silently dropped `AppProjectBuilder.kt`
+from the repository — local builds passed because the file was on disk, and only CI (a fresh
+clone) failed. Use `/build/`, `/app/build/`, and so on. Run
+`git ls-files --others --exclude-standard` before trusting a push.
