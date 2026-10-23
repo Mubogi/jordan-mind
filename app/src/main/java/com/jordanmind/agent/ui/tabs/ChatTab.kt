@@ -31,9 +31,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jordanmind.agent.agent.WorkBot
 import com.jordanmind.agent.engine.LlmState
 import com.jordanmind.agent.tools.Voice
 import com.jordanmind.agent.ui.AppViewModel
@@ -73,6 +77,7 @@ fun ChatTab(vm: AppViewModel) {
     val messages by vm.messages.collectAsStateWithLifecycle()
     val state by vm.llmState.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val workMode by vm.workMode.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     var input by remember { mutableStateOf("") }
@@ -123,6 +128,21 @@ fun ChatTab(vm: AppViewModel) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
         }
 
+        // Work mode changes the persona the model is given, not the model itself.
+        FilterChip(
+            selected = workMode,
+            onClick = { vm.setWorkMode(!workMode) },
+            modifier = Modifier.padding(horizontal = 12.dp),
+            label = { Text(if (workMode) "Work mode on" else "Work mode") },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Work,
+                    contentDescription = null,
+                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                )
+            },
+        )
+
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -132,15 +152,12 @@ fun ChatTab(vm: AppViewModel) {
             if (messages.isEmpty() && state is LlmState.Ready) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionLabel("Try asking")
-                        listOf(
-                            "Summarise photosynthesis in three lines",
-                            "Write a polite email asking for a deadline extension",
-                            "Explain recursion with a simple example",
-                        ).forEach { prompt ->
+                        SectionLabel(if (workMode) "Work mode — try asking" else "Try asking")
+                        val openers = if (workMode) WorkBot.OPENERS else GENERAL_OPENERS
+                        openers.forEach { prompt ->
                             AssistChip(
                                 onClick = { input = prompt },
-                                label = { Text(prompt, maxLines = 1) },
+                                label = { Text(prompt, maxLines = 2) },
                             )
                         }
                     }
@@ -387,3 +404,10 @@ private fun ModelSetupPanel(vm: AppViewModel, onPickFile: () -> Unit) {
         }
     }
 }
+
+/** Default openers for a normal chat, kept out of the composable so it is not rebuilt per frame. */
+private val GENERAL_OPENERS = listOf(
+    "Summarise photosynthesis in three lines",
+    "Write a polite email asking for a deadline extension",
+    "Explain recursion with a simple example",
+)

@@ -24,13 +24,22 @@ sealed interface LlmState {
 
 data class LlmSettings(
     val backend: LlmInference.Backend = LlmInference.Backend.CPU,
-    val maxTokens: Int = 1024,
+    val maxTokens: Int = 512,
     val topK: Int = 40,
     val topP: Float = 0.95f,
     val temperature: Float = 0.8f,
     /** Rough conversation token ceiling before the session is rebuilt. */
-    val contextBudget: Int = 1800,
-)
+    val contextBudget: Int = 1536,
+) {
+    /**
+     * Applies the device's ceilings to whatever is configured, so defaults chosen for a faster
+     * phone cannot ask a 4 GB device for a context that gets killed on allocation.
+     */
+    fun cappedFor(profile: DeviceProfile): LlmSettings = copy(
+        maxTokens = maxTokens.coerceAtMost(profile.maxTokens),
+        contextBudget = contextBudget.coerceAtMost(profile.contextBudget),
+    )
+}
 
 /**
  * Single on-device text generator backed by the MediaPipe / LiteRT LLM Inference API.
@@ -38,7 +47,11 @@ data class LlmSettings(
  * One [LlmInference] handle is shared for the whole process; a [LlmInferenceSession] holds the
  * KV cache for a conversation so follow-up turns do not re-prefill the whole history.
  */
-class LlmEngine(private val context: Context) {
+class LlmEngine(
+    private val context: Context,
+    /** Capability of this phone; every load is clamped to its ceilings. */
+    val profile: DeviceProfile = DeviceProfile.detect(context),
+) {
 
     private var inference: LlmInference? = null
     private var session: LlmInferenceSession? = null
@@ -57,7 +70,9 @@ class LlmEngine(private val context: Context) {
         withContext(Dispatchers.IO) {
             runCatching {
                 unload()
-                settings = newSettings
+                // Clamp before anything is allocated: an oversized context is what gets the app
+                // killed on a low-RAM phone, and it looks like a random crash to the user.
+                settings = newSettings.cappedFor(profile)
                 _state.value = LlmState.Loading("Opening ${model.name}…")
                 require(model.exists()) { "Model file not found: ${model.absolutePath}" }
 

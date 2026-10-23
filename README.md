@@ -53,15 +53,49 @@ Two APKs are built from this source:
 
 | APK | Size | Works offline on first launch? |
 |---|---|---|
-| `JordanMind-1.1-bundled.apk` | ~595 MB | Yes. Qwen2.5-0.5B q8 is inside; the app unpacks and loads it on first start. |
-| `JordanMind-1.1-lite.apk` | ~73 MB | No. It has no model, so import a `.task` from **Chat → Import file** before chatting. |
+| `JordanMind-1.2-bundled.apk` | ~595 MB | Yes. Qwen2.5-0.5B q8 is inside; the app unpacks and loads it on first start. |
+| `JordanMind-1.2-lite.apk` | ~73 MB | No. It has no model, so import a `.task` from **Chat → Import file** before chatting. |
 
 Download the bundled one if you want to install and immediately talk to it. Download the lite one
-only if you already have a `.task` file and would rather not pull 595 MB. Both are version 1.1
-(versionCode 2).
+only if you already have a `.task` file and would rather not pull 595 MB. Both are version 1.2
+(versionCode 3).
 
 > Version 1.0 had a real defect: it never loaded a model, so the chat input stayed disabled and the
 > app looked broken. 1.1 loads a model at startup and says what to do when it cannot find one.
+> 1.2 tunes itself to the phone it is installed on and adds Work mode.
+
+### Tuned for the phone in your hand
+
+Version 1.2 reads the device's RAM at startup and picks a matching working set, so the same build
+behaves on a budget phone and a flagship:
+
+| RAM | Tier | Context | Max reply | Background drift |
+|---|---|---|---|---|
+| up to 4 GB | lean | 1024 tokens | 384 tokens | off |
+| up to 6 GB | balanced | 1536 tokens | 512 tokens | on |
+| above 6 GB | capable | 2048 tokens | 768 tokens | on |
+
+A Redmi 15C (Helio G81-Ultra) sits in the lean or balanced tier. The ceiling is enforced in
+`LlmEngine.load`, so an oversized context cannot be allocated even if a settings file asks for one —
+that allocation is what makes the app look like it "keeps stopping" on a 4 GB phone. Thread count is
+not a setting: MediaPipe's own thread pool already sizes itself to the fast CPU cluster, and the API
+exposes no override, so a knob here would be a lie.
+
+The background gradient stops animating whenever the app is not on screen. An infinite animation is
+never idle, so leaving it running kept the whole UI recomposing and the GPU busy in the background.
+
+### Work mode
+
+A toggle above the chat switches the assistant to a work persona: it leads with the finished draft,
+produces copy-ready emails and status updates, plans in short numbered steps, and refuses to invent
+facts, figures or dates. It is a system prompt, not a second model, so it adds nothing to the RAM
+footprint.
+
+### Share to Jordan Mind
+
+The app registers for `ACTION_SEND` text. Selecting text in any app and choosing *Jordan Mind* opens
+the chat with that text already sent, which is the fastest path from a message or a note to a draft
+reply. There is still no network permission.
 
 The APK is signed with a self-signed key, so Android will ask you to allow installation from
 unknown sources before it will sideload.

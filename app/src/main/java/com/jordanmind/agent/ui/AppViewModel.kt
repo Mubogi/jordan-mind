@@ -13,8 +13,10 @@ import com.jordanmind.agent.agent.MemoryStore
 import com.jordanmind.agent.agent.Planner
 import com.jordanmind.agent.agent.Prompts
 import com.jordanmind.agent.agent.ReminderStore
+import com.jordanmind.agent.agent.WorkBot
 import com.jordanmind.agent.data.RagStore
 import com.jordanmind.agent.data.Workspace
+import com.jordanmind.agent.engine.DeviceProfile
 import com.jordanmind.agent.engine.LlmEngine
 import com.jordanmind.agent.engine.LlmSettings
 import com.jordanmind.agent.engine.LlmState
@@ -46,6 +48,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val engine = LlmEngine(application)
     val llmState: StateFlow<LlmState> = engine.state
 
+    /** What this phone can comfortably run; drives defaults and the settings summary. */
+    val deviceProfile: DeviceProfile = engine.profile
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -58,11 +63,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _installed = MutableStateFlow<List<File>>(emptyList())
     val installed: StateFlow<List<File>> = _installed.asStateFlow()
 
-    private val _settings = MutableStateFlow(LlmSettings())
+    private val _settings = MutableStateFlow(LlmSettings().cappedFor(engine.profile))
     val settings: StateFlow<LlmSettings> = _settings.asStateFlow()
 
     private val _activeModel = MutableStateFlow<File?>(null)
     val activeModel: StateFlow<File?> = _activeModel.asStateFlow()
+
+    /**
+     * Text handed to the app from a share sheet, waiting to be sent. Kept separate from [messages]
+     * so the UI can switch to the chat tab before the turn starts.
+     */
+    private val _sharedText = MutableStateFlow<String?>(null)
+    val sharedText: StateFlow<String?> = _sharedText.asStateFlow()
+
+    fun onShareReceived(text: String?) {
+        if (!text.isNullOrBlank()) _sharedText.value = text.trim()
+    }
+
+    fun consumeSharedText() {
+        val text = _sharedText.value ?: return
+        _sharedText.value = null
+        submitExternalText(text)
+    }
+
+    /**
+     * Work mode swaps the chat persona. [send] picks the prompt at call time, so toggling it does
+     * not disturb a reply already in flight.
+     */
+    private val _workMode = MutableStateFlow(false)
+    val workMode: StateFlow<Boolean> = _workMode.asStateFlow()
+
+    fun setWorkMode(enabled: Boolean) {
+        _workMode.value = enabled
+    }
 
     private var generation: Job? = null
     private var autoLoadStarted = false
@@ -108,6 +141,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun notify(message: String) {
         _status.value = message
+    }
+
+    /**
+     * Entry point for text shared from another app, so a message or document can be handed to the
+     * agent without retyping it. [send] does the message bookkeeping.
+     */
+    fun submitExternalText(text: String) {
+        if (text.isBlank()) return
+        send(text.trim())
     }
 
     fun clearStatus() {
@@ -171,7 +213,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // -------------------------------------------------------------------- chat
 
-    fun send(prompt: String, system: String = LlmEngine.DEFAULT_SYSTEM) {
+    private fun activeSystem(): String =
+        if (_workMode.value) WorkBot.SYSTEM else LlmEngine.DEFAULT_SYSTEM
+
+    fun send(prompt: String, system: String = activeSystem()) {
         if (prompt.isBlank() || generation?.isActive == true) return
         _messages.value = _messages.value + ChatMessage(ChatMessage.Role.USER, prompt)
         val placeholderIndex = _messages.value.size

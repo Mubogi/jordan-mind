@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
@@ -20,6 +24,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /** Accent hues used for gradients, glows and the assistant orb. */
 object Accent {
@@ -37,9 +44,25 @@ object Accent {
 /**
  * The signature background: a near-black canvas lit by two soft accent blooms. Drawn rather than
  * shipped as an image so it costs nothing in APK size and scales to any screen.
+ *
+ * The drift only runs while the screen is actually visible. An infinite animation is never
+ * considered idle, so leaving it on would keep the whole UI recomposing and the GPU busy in the
+ * background — on a Helio G81 that is measurable battery drain and heat for something nobody can
+ * see. [reduceMotion] pins the drift still for low-end devices while keeping the gradient.
  */
 @Composable
-fun AuroraBackdrop(modifier: Modifier = Modifier) {
+fun AuroraBackdrop(modifier: Modifier = Modifier, reduceMotion: Boolean = false) {
+    var visible by remember { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            visible = event == Lifecycle.Event.ON_START
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val animate = visible && !reduceMotion
     val transition = rememberInfiniteTransition(label = "aurora")
     val drift by transition.animateFloat(
         initialValue = 0f,
@@ -50,6 +73,7 @@ fun AuroraBackdrop(modifier: Modifier = Modifier) {
         ),
         label = "drift",
     )
+    val shift = if (animate) drift else 0.5f
 
     Box(
         modifier
@@ -65,20 +89,16 @@ fun AuroraBackdrop(modifier: Modifier = Modifier) {
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(Accent.Amber.copy(alpha = 0.16f), Color.Transparent),
-                        center = Offset(w * (0.12f + 0.10f * drift), h * 0.04f),
+                        center = Offset(w * (0.12f + 0.10f * shift), h * 0.04f),
                         radius = w * 0.85f,
                     ),
-                    radius = w * 0.85f,
-                    center = Offset(w * (0.12f + 0.10f * drift), h * 0.04f),
                 )
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(Accent.Aqua.copy(alpha = 0.10f), Color.Transparent),
-                        center = Offset(w * (0.95f - 0.12f * drift), h * 0.72f),
+                        center = Offset(w * (0.95f - 0.12f * shift), h * 0.72f),
                         radius = w * 0.75f,
                     ),
-                    radius = w * 0.75f,
-                    center = Offset(w * (0.95f - 0.12f * drift), h * 0.72f),
                 )
             },
     )

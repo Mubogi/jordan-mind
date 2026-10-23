@@ -1,9 +1,11 @@
 package com.jordanmind.agent
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,15 +37,32 @@ import com.jordanmind.agent.ui.Tab
 
 class MainActivity : ComponentActivity() {
 
+    private val viewModel: AppViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        viewModel.onShareReceived(readSharedText(intent))
         setContent {
             JordanMindTheme {
-                JordanMindRoot()
+                JordanMindRoot(viewModel)
             }
         }
     }
+
+    /** A share that arrives while the app is already open still lands in the chat. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.onShareReceived(readSharedText(intent))
+    }
+
+    private fun readSharedText(intent: Intent?): String? =
+        if (intent?.action == Intent.ACTION_SEND) {
+            intent.getStringExtra(Intent.EXTRA_TEXT)
+        } else {
+            null
+        }
 }
 
 /**
@@ -58,6 +77,15 @@ fun JordanMindRoot(vm: AppViewModel = viewModel()) {
         androidx.compose.runtime.mutableStateOf(Tab.CHAT)
     }
 
+    // Text shared from another app ("share to Jordan Mind") lands in the chat tab.
+    val shared by vm.sharedText.collectAsStateWithLifecycle()
+    LaunchedEffect(shared) {
+        shared?.let {
+            tab = Tab.CHAT
+            vm.consumeSharedText()
+        }
+    }
+
     LaunchedEffect(status) {
         status?.let {
             snackbar.showSnackbar(it)
@@ -70,7 +98,7 @@ fun JordanMindRoot(vm: AppViewModel = viewModel()) {
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-            AuroraBackdrop()
+            AuroraBackdrop(reduceMotion = vm.deviceProfile.reduceMotion)
             Column(Modifier.fillMaxSize().padding(padding)) {
                 JordanTabRail(selected = tab, onSelect = { tab = it })
                 Box(Modifier.fillMaxSize()) {

@@ -19,8 +19,8 @@ android {
         applicationId = "com.jordanmind.agent"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
         vectorDrawables { useSupportLibrary = true }
 
         // Phone ABIs only. Dropping x86/x86_64 removes ~63 MB of emulator-only native libraries.
@@ -87,6 +87,15 @@ android {
         unitTests {
             // Robolectric renders the real Compose UI on the JVM, so it needs merged resources.
             isIncludeAndroidResources = true
+            all {
+                // The Compose test harness registers a stub ComponentActivity so ActivityScenario
+                // can launch it. It is a debugImplementation, so without this the whole UI suite
+                // fails to resolve the activity in the release variant — and `./gradlew test` runs
+                // both variants, which would report failures that do not exist in the debug build.
+                if (it.name.contains("Release")) {
+                    it.exclude("**/UiSmokeTest*", "**/ScreenshotTest*")
+                }
+            }
         }
     }
 
