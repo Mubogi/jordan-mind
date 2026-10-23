@@ -3,8 +3,8 @@
 # Publishes a Jordan Mind release to GitHub: pushes the branch, tags it, creates the release and
 # uploads every asset, including the screenshots.
 #
-# It is safe to re-run. The tag and release are created only if missing, and assets are uploaded
-# with --clobber, so a half-finished run can simply be repeated.
+# It is safe to re-run. The tag and release are created only if missing, and an asset that is
+# already published is replaced, so a half-finished run can simply be repeated.
 #
 # Usage:
 #   GITHUB_TOKEN=... ./packaging/release.sh                 # uses the version in app/build.gradle.kts
@@ -19,7 +19,17 @@ cd "$ROOT"
 
 : "${GITHUB_TOKEN:?set GITHUB_TOKEN to a token with repo scope}"
 
-VERSION="${VERSION:-$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)}"
+# The APKs carry the short version ("1.2") while the tag and Windows installers carry the full one
+# ("1.2.0") — that is the convention the existing v1.1.0 release follows. Deriving both from
+# app/build.gradle.kts means neither name has to be passed in or guessed.
+APP_VERSION="$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)"
+APK_VERSION="${APK_VERSION:-$APP_VERSION}"
+VERSION="${VERSION:-$APP_VERSION}"
+# "1.2" -> "1.2.0"; a version that already has a patch component is left alone.
+case "$VERSION" in
+  *.*.*) ;;
+  *) VERSION="$VERSION.0" ;;
+esac
 TAG="${TAG:-v$VERSION}"
 API="https://api.github.com/repos/$REPO"
 
@@ -52,8 +62,8 @@ add_asset() {
   fi
 }
 
-add_asset "JordanMind-$VERSION-bundled.apk"
-add_asset "JordanMind-$VERSION-lite.apk"
+add_asset "JordanMind-$APK_VERSION-bundled.apk"
+add_asset "JordanMind-$APK_VERSION-lite.apk"
 add_asset "JordanMind-Setup-$VERSION-win64.exe"
 add_asset "JordanMind-Setup-$VERSION-win64-bundled.exe"
 
@@ -86,8 +96,8 @@ Version $VERSION. Everything still runs on the device: the app declares no netwo
 
 | File | Size | Notes |
 |---|---|---|
-| \`JordanMind-$VERSION-bundled.apk\` | ~595 MB | Qwen2.5-0.5B is inside. Install and talk to it straight away. |
-| \`JordanMind-$VERSION-lite.apk\` | ~73 MB | No model. Import a \`.task\` from **Chat → Import file** first. |
+| \`JordanMind-$APK_VERSION-bundled.apk\` | ~595 MB | Qwen2.5-0.5B is inside. Install and talk to it straight away. |
+| \`JordanMind-$APK_VERSION-lite.apk\` | ~73 MB | No model. Import a \`.task\` from **Chat → Import file** first. |
 | \`JordanMind-Setup-$VERSION-win64-bundled.exe\` | ~596 MB | Windows, offline out of the box (GGUF + llama.cpp included). |
 | \`JordanMind-Setup-$VERSION-win64.exe\` | ~100 MB | Windows, app only. |
 
@@ -130,7 +140,7 @@ Full-size captures are in \`docs/screenshots/android/\` on \`master\`.
 ## Verify the offline claim
 
 \`\`\`
-aapt2 dump badging JordanMind-$VERSION-bundled.apk | grep -i internet   # prints nothing
+aapt2 dump badging JordanMind-$APK_VERSION-bundled.apk | grep -i internet   # prints nothing
 \`\`\`
 EOF
 )"
@@ -151,8 +161,18 @@ else
 fi
 
 # ---------------------------------------------------------------- upload
+# GitHub rejects a second asset with the same name, so an existing one is removed first. That is
+# what makes re-running this script safe after a partial upload.
 for asset in "${assets[@]}"; do
   name="$(basename "$asset")"
+  existing="$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" "$API/releases/tags/$TAG" \
+    | jq -r --arg n "$name" '.assets[] | select(.name == $n) | .id')"
+  if [ -n "$existing" ]; then
+    say "Replacing existing asset $name"
+    curl -fsS -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+      "$API/releases/assets/$existing" >/dev/null || die "could not remove the old $name"
+  fi
+
   say "Uploading $name"
   curl -fsS -X POST \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
