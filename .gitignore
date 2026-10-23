@@ -1,6 +1,10 @@
-# Build output
-build/
-*/build/
+# Build output. Anchored per module: an unanchored "build/" also matches source
+# packages such as app/src/main/java/com/jordanmind/agent/build/, which silently
+# dropped AppProjectBuilder.kt from the repository.
+/build/
+/app/build/
+/core/build/
+/desktop/build/
 .gradle/
 local.properties
 .kotlin/
