@@ -1,5 +1,6 @@
 package com.jordanmind.agent.ui.tabs
 
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.AlertDialog
@@ -33,11 +35,10 @@ import androidx.compose.ui.unit.dp
 import com.jordanmind.agent.tools.FileTools
 import com.jordanmind.agent.ui.AppViewModel
 import com.jordanmind.agent.ui.TabHeader
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-
 @Composable
 fun FilesTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
@@ -107,7 +108,7 @@ fun FilesTab(vm: AppViewModel) {
                         )
                     }
                     IconButton(onClick = { dialog = Dialog.Rename(entry.file) }) {
-                        Icon(Icons.Filled.InsertDriveFile, contentDescription = "Rename")
+                        Icon(Icons.Filled.DriveFileRenameOutline, contentDescription = "Rename")
                     }
                     IconButton(onClick = {
                         scope.launch {

@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -26,7 +27,9 @@ import com.jordanmind.agent.ui.tabs.DocumentsTab
 import com.jordanmind.agent.ui.tabs.ExamTab
 import com.jordanmind.agent.ui.tabs.FilesTab
 import com.jordanmind.agent.ui.tabs.ResearchTab
-import com.jordanmind.agent.ui.JordanBottomBar
+
+import com.jordanmind.agent.ui.AgentTab
+import com.jordanmind.agent.ui.JordanTabRail
 import com.jordanmind.agent.ui.Tab
 
 class MainActivity : ComponentActivity() {
@@ -59,18 +62,19 @@ private fun JordanMindRoot(vm: AppViewModel = viewModel()) {
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = {
-            JordanBottomBar(selected = tab, onSelect = { tab = it })
-        },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            JordanTabRail(selected = tab, onSelect = { tab = it })
+            Box(Modifier.fillMaxSize()) {
             when (tab) {
                 Tab.CHAT -> ChatTab(vm)
+                Tab.AGENT -> AgentTab(vm)
                 Tab.BUILD -> BuildTab(vm)
                 Tab.DOCS -> DocumentsTab(vm)
                 Tab.FILES -> FilesTab(vm)
                 Tab.RESEARCH -> ResearchTab(vm)
                 Tab.EXAM -> ExamTab(vm)
+            }
             }
         }
     }

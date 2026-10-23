@@ -30,13 +30,35 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // A checked-in debug keystore would be a real credential in the repo. Instead the
+            // release key is generated on first use and kept out of version control; supply
+            // RELEASE_STORE_FILE / _PASSWORD / _ALIAS / _KEY_PASSWORD to sign reproducibly.
+            val storePath = System.getenv("RELEASE_STORE_FILE")
+                ?: rootProject.file("keystore/release.jks").absolutePath
+            val store = file(storePath)
+            if (store.exists()) {
+                storeFile = store
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "jordanmind"
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "jordanmind"
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "jordanmind"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -59,6 +81,13 @@ android {
     // fast and avoids AAPT2's large-asset compression edge cases.
     androidResources {
         noCompress += listOf("task", "litertlm", "bin", "gguf")
+    }
+
+    testOptions {
+        unitTests {
+            // Robolectric renders the real Compose UI on the JVM, so it needs merged resources.
+            isIncludeAndroidResources = true
+        }
     }
 
     packaging {
@@ -92,7 +121,13 @@ val stageBundledModel by tasks.registering(Copy::class) {
     }
 }
 
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+// Any task that reads the assets directory must wait for the model to be staged there. Lint's
+// model writer reads it too, which is easy to miss and fails the build with an implicit-dependency
+// error rather than anything obviously related to the model.
+tasks.matching {
+    val name = it.name.lowercase()
+    (name.startsWith("merge") && name.endsWith("assets")) || name.contains("lint")
+}.configureEach {
     if (bundleModelPath != null) dependsOn(stageBundledModel)
 }
 
@@ -119,4 +154,9 @@ dependencies {
     implementation(libs.pdfbox.android)
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+

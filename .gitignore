@@ -1,13 +1,29 @@
-*.iml
+# Build output
+build/
+*/build/
 .gradle/
 local.properties
-.idea/
-.DS_Store
-build/
-captures/
-.externalNativeBuild/
-.cxx/
+.kotlin/
+
+# Signing material must never be committed. Generate a release key and pass it via
+# RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD.
+keystore/
+*.jks
+*.keystore
+
+# Large local artifacts
 *.apk
 *.aab
 *.task
 *.litertlm
+*.gguf
+models/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

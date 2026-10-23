@@ -5,6 +5,14 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.jordanmind.agent.agent.ActionRunner
+import com.jordanmind.agent.agent.ActionType
+import com.jordanmind.agent.agent.Article
+import com.jordanmind.agent.agent.ContentStudio
+import com.jordanmind.agent.agent.MemoryStore
+import com.jordanmind.agent.agent.Planner
+import com.jordanmind.agent.agent.Prompts
+import com.jordanmind.agent.agent.ReminderStore
 import com.jordanmind.agent.data.RagStore
 import com.jordanmind.agent.data.Workspace
 import com.jordanmind.agent.engine.LlmEngine
@@ -194,8 +202,135 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ------------------------------------------------------------------ agent
+
+    val memory = MemoryStore(application)
+    val reminders = ReminderStore(application)
+    val studio = ContentStudio(application)
+    private val runner = ActionRunner(application)
+
+    /**
+     * Plans an instruction and runs it. Progress lines are handed to [onLine] as they happen so
+     * the Agent tab can show what the agent is doing.
+     *
+     * Order matters: templates and learned patterns are tried before the model, so the agent is
+     * usable with no model loaded at all.
+     */
+    fun runAgentInstruction(
+        instruction: String,
+        onLine: (String) -> Unit,
+        onSource: (String) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                val planner = Planner(memory) { prompt ->
+                    var out = ""
+                    engine.send(prompt, AGENT_SYSTEM).collect { out = it }
+                    out
+                }
+                val plan = planner.plan(instruction)
+                onSource(plan.source.name.lowercase())
+                onLine("· planned: ${plan.action.type}")
+
+                when (plan.action.type) {
+                    ActionType.NOTE -> {
+                        memory.putFact(instruction.take(40), plan.action.args["text"] ?: instruction)
+                        onLine("· remembered")
+                    }
+                    ActionType.REMIND -> {
+                        val at = parseWhen(plan.action.args["time"].orEmpty())
+                        if (at == null) {
+                            onLine("! could not read the time \"${plan.action.args["time"]}\"")
+                        } else {
+                            val task = plan.action.args["task"].orEmpty().ifBlank { instruction }
+                            reminders.add(task, at)
+                            onLine("· reminder set for ${ReminderStore.format(at)}")
+                        }
+                    }
+                    ActionType.DRAFT_ARTICLE -> {
+                        val topic = plan.action.args["topic"].orEmpty()
+                        val body = generate(Prompts.article(topic))
+                        studio.add(Article(id = nextId(), title = firstLine(body), body = body, topic = topic))
+                        onLine("· drafted \"$topic\" (${body.split(" ").size} words)")
+                    }
+                    ActionType.SCHEDULE_ARTICLE -> {
+                        val topic = plan.action.args["topic"].orEmpty()
+                        val body = generate(Prompts.article(topic))
+                        val at = System.currentTimeMillis() + 24 * 3600_000L
+                        studio.add(
+                            Article(
+                                id = nextId(),
+                                title = firstLine(body),
+                                body = body,
+                                topic = topic,
+                                publishAt = at,
+                            ),
+                        )
+                        onLine("· scheduled \"$topic\" for ${ContentStudio.formatTime(at)}")
+                        onLine("  note: it will notify you, it cannot post by itself offline")
+                    }
+                    ActionType.MONEY -> {
+                        val ideas = generate(Prompts.money(plan.action.args["topic"].orEmpty()))
+                        studio.add(
+                            Article(
+                                id = nextId(),
+                                title = "Money ideas",
+                                body = ideas,
+                                topic = plan.action.args["topic"].orEmpty(),
+                            ),
+                        )
+                        onLine("· saved money ideas to Docs")
+                    }
+                    ActionType.ANSWER -> onLine(plan.action.reply.take(600))
+                    else -> {
+                        val result = runner.run(plan.action)
+                        onLine(if (result.ok) "· ${result.message}" else "! ${result.message}")
+                    }
+                }
+            } catch (error: Exception) {
+                onLine("! ${error.message ?: "something went wrong"}")
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    private suspend fun generate(prompt: String): String {
+        var out = ""
+        runCatching { engine.send(prompt, LlmEngine.DEFAULT_SYSTEM).collect { out = it } }
+        return out.trim().ifBlank { "The model returned nothing. Load a model in Chat first." }
+    }
+
+    private fun nextId(): String = System.currentTimeMillis().toString()
+
+    private fun firstLine(body: String): String =
+        body.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(80).orEmpty()
+
+    /** Accepts a clock time ("7pm") or a relative offset ("in 20 minutes"). */
+    private fun parseWhen(raw: String): Long? {
+        val text = raw.lowercase().trim()
+        if (text.startsWith("in ") || Regex("\\d+\\s*(min|hour|hr|sec)").containsMatchIn(text)) {
+            ActionRunner.parseDuration(text)?.let { return System.currentTimeMillis() + it * 1000L }
+        }
+        val clock = ActionRunner.parseTime(text) ?: return null
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, clock.first)
+        calendar.set(java.util.Calendar.MINUTE, clock.second)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        if (calendar.timeInMillis <= System.currentTimeMillis()) {
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        return calendar.timeInMillis
+    }
+
     override fun onCleared() {
         engine.unload()
         super.onCleared()
+    }
+
+    companion object {
+        private const val AGENT_SYSTEM =
+            "You convert phone instructions into a single action. Reply with JSON only."
     }
 }

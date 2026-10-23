@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "JordanMind"
 include(":app")
+include(":core")
+include(":desktop")
