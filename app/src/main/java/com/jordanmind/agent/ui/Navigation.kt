@@ -21,7 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+
+/** Lets UI tests scroll the rail to chips that are off-screen and therefore not composed yet. */
+const val TabRailTestTag = "jordan-tab-rail"
 
 enum class Tab(val label: String, val icon: ImageVector) {
     CHAT("Chat", Icons.Filled.Chat),
@@ -40,7 +44,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun JordanTabRail(selected: Tab, onSelect: (Tab) -> Unit) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag(TabRailTestTag),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

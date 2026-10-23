@@ -19,6 +19,34 @@ the internet even if it wanted to.
 A desktop app shares the same agent core (`:core`), so planning, memory and slot filling behave
 identically on both targets.
 
+## Screenshots
+
+Every image below is a real capture of the app running, not a mockup. The desktop shots come from
+the Linux build under Xvfb; the phone shots are rendered by the Compose test suite on the JVM
+(`ScreenshotTest`), because this machine has no KVM for an emulator.
+
+### Desktop
+
+Dark is the default; the light theme is one click away in the sidebar.
+
+![Desktop, dark theme](docs/screenshots/pc-dark.png)
+
+![Desktop, light theme](docs/screenshots/pc-light.png)
+
+The model runs offline. This exchange was generated locally by `qwen2.5-0.5b-instruct-q4_k_m`:
+
+![Offline chat answer](docs/screenshots/03-chat-answer-dark.png)
+
+The agent plans an instruction with a learned template, then executes it:
+
+![Agent runs a reminder](docs/screenshots/04-agent-task-dark.png)
+
+### Android
+
+![Android, all tabs](docs/screenshots/android-overview.png)
+
+Android is dark-only by design. Full-size images are in `docs/screenshots/android/`.
+
 ## Install
 
 CI builds all of these on every push; grab them from the **Actions** tab.
@@ -69,7 +97,7 @@ Requires JDK 21 and an Android SDK with platform 36 and build-tools 36.0.0. Poin
 `local.properties` at your SDK, or set `ANDROID_HOME`.
 
 ```bash
-./gradlew testDebugUnitTest :core:test :desktop:test   # 64 tests
+./gradlew testDebugUnitTest :core:test :desktop:test   # 68 tests
 ```
 
 The packaged desktop app can verify itself without a display:

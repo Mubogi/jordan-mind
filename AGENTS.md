@@ -33,7 +33,7 @@ Builds are slow (2–3 min) and run in the background with `nohup ... &`, then p
 ## Commands
 
 ```bash
-# all tests (64 tests: core, planner, time parsing, UI smoke)
+# all tests (68 tests: core, planner, time parsing, UI smoke, model)
 ./gradlew testDebugUnitTest :core:test :desktop:test
 
 # release APK, no model bundled
@@ -52,6 +52,20 @@ Builds are slow (2–3 min) and run in the background with `nohup ... &`, then p
 # verify a packaged desktop binary end to end, no display needed
 "desktop/build/compose/binaries/main-release/app/Jordan Mind/bin/Jordan Mind" --selftest
 ```
+
+## Screenshots
+
+There is no emulator here (no `/dev/kvm`), so the two targets are captured differently.
+
+- Android: `./gradlew :app:testDebugUnitTest --tests "com.jordanmind.agent.ScreenshotTest"`.
+  Robolectric renders the real Compose UI and writes PNGs to `docs/screenshots/android/`. It uses
+  `@GraphicsMode(NATIVE)` and a `w411dp-h891dp-xxhdpi` qualifier, so the images are phone-sized.
+  The tab rail is a `LazyRow`, so off-screen chips are not composed; scroll it by
+  `TabRailTestTag` before clicking a trailing tab.
+- Desktop: run the app under `Xvfb :99`, then screenshot the largest window matching `Jordan Mind`.
+  The app also registers 10x10 and 1x1 helper windows, so pick the biggest, not the first.
+  Compare with `-colorspace Gray -format "%[fx:mean*255]"` to confirm which theme is on screen —
+  the toggle's label names the theme you would switch *to*, so it reads opposite to the pixels.
 
 ## Things that will bite you
 
@@ -104,7 +118,7 @@ to guessing word boundaries: it silently mangles multi-slot patterns like
 
 ## Verified state
 
-- 64 unit tests pass; `lintRelease` is clean.
+- 68 unit tests pass; `lintRelease` is clean.
 - Release APK: 77 MB (no model) / 624 MB (bundled), signed, `apksigner verify` OK.
 - Desktop `.deb` installs and the installed binary passes all 19 `--selftest` checks.
 - Windows installer: built on Linux by `packaging/windows/build-windows-installer.sh`, and
@@ -134,9 +148,11 @@ Gotchas:
   producing a `-bundled` installer that works offline with nothing installed. `LocalModel` looks
   there first, then `~/.jordanmind/models`. Downloads are cached in `packaging/windows/.cache/`
   so repeat builds skip ~1 GB of fetching.
-- Wine limit: `llama-cli.exe` loads a model under Wine but never finishes generating tokens, so
-  bundled-model *discovery* can be verified there but generated text cannot. Confirm real output
-  on Windows. Do not claim the offline model was tested end to end from Wine alone.
+- Wine limit: `llama-cli.exe` under Wine was reported as never finishing generation. The real
+  cause was an app bug, not Wine: `LocalModel` did not pass `-st`, so `llama-cli` stayed in
+  interactive mode waiting on stdin and the app blocked until the timeout. That is fixed
+  (`-st` plus a closed stdin) and covered by `LocalModelTest`. Re-verify end to end under Wine
+  before claiming the bundled model generates text on Windows.
 - `apt-get install wine64` removed the system JDK in this environment once. If `java` vanishes,
   reinstall `openjdk-21-jdk-headless`.
 

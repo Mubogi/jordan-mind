@@ -41,24 +41,54 @@ class LocalModel(
             "-n", maxTokens.toString(),
             "--no-display-prompt",
             "--simple-io",
+            // Without --single-turn llama-cli waits on stdin for another turn after answering,
+            // and the reader below blocks on its stdout until the timeout kills it.
+            "-st",
             "-t", Runtime.getRuntime().availableProcessors().coerceAtMost(8).toString(),
         )
         return runCatching {
             val process = ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .start()
+            // A closed stdin makes llama-cli treat the prompt as the only turn.
+            process.outputStream.close()
             val output = StringBuilder()
-            BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
-                reader.forEachLine { line ->
-                    // llama-cli prints its own load banner; keep only generated text.
-                    if (!line.startsWith("llama_") && !line.startsWith("load_") && !line.startsWith("print_info")) {
-                        output.appendLine(line)
+            // Read on a worker so a stalled llama-cli cannot block past the deadline; reading
+            // inline would park here forever and never reach the waitFor below.
+            val reader = Thread {
+                runCatching {
+                    BufferedReader(InputStreamReader(process.inputStream)).use { input ->
+                        input.forEachLine { line ->
+                            synchronized(output) { output.appendLine(line) }
+                        }
                     }
                 }
             }
-            process.waitFor(180, TimeUnit.SECONDS)
-            output.toString().trim()
+            reader.isDaemon = true
+            reader.start()
+            if (!process.waitFor(180, TimeUnit.SECONDS)) process.destroyForcibly()
+            reader.join(5_000)
+            extractReply(output.toString(), prompt)
         }.getOrElse { "" }
+    }
+
+    /**
+     * Pulls the answer out of llama-cli's stdout.
+     *
+     * llama-cli always prints a startup banner, echoes the prompt as `> <prompt>`, then the reply,
+     * then a `[ Prompt: ... ]` timing line. No flag suppresses the banner, so the reply is taken as
+     * the text between the echoed prompt and the timing line.
+     */
+    private fun extractReply(raw: String, prompt: String): String {
+        val lines = raw.lines()
+        val promptLines = prompt.trim().lines()
+        val echo = "> " + promptLines.first().trim()
+        val start = lines.indexOfFirst { it.trim() == echo }
+        val body = if (start >= 0) lines.drop(start + promptLines.size) else lines
+        return body
+            .takeWhile { !it.trimStart().startsWith("[ Prompt:") && it.trim() != "Exiting..." }
+            .joinToString("\n")
+            .trim()
     }
 
     private fun resolveBinary(): String? {

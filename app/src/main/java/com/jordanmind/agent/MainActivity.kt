@@ -45,8 +45,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * The whole app UI. Visible so Robolectric can render the real screen for smoke tests and
+ * documentation screenshots.
+ */
 @Composable
-private fun JordanMindRoot(vm: AppViewModel = viewModel()) {
+fun JordanMindRoot(vm: AppViewModel = viewModel()) {
     val snackbar = remember { SnackbarHostState() }
     val status by vm.status.collectAsStateWithLifecycle()
     var tab by androidx.compose.runtime.saveable.rememberSaveable {
