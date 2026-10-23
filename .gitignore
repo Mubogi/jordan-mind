@@ -36,3 +36,4 @@ Thumbs.db
 packaging/windows/.work/
 packaging/windows/dist/
 packaging/windows/JordanMind.exe
+packaging/windows/.cache/

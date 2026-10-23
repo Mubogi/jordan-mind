@@ -19,7 +19,7 @@ Unicode true
 !define REGKEY     "Software\Microsoft\Windows\CurrentVersion\Uninstall\JordanMind"
 
 Name "${APPNAME} ${VERSION}"
-OutFile "${OUTDIR}/JordanMind-Setup-${VERSION}-win64.exe"
+OutFile "${OUTDIR}/JordanMind-Setup-${VERSION}-win64${SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\${APPNAME}"
 InstallDirRegKey HKCU "Software\JordanMind" "InstallDir"
 RequestExecutionLevel user

@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  */
 class LocalModel(
     private val modelFile: File? = defaultModelFile(),
-    private val binary: String = System.getenv("JORDANMIND_LLAMA") ?: "llama-cli",
+    private val binary: String = defaultBinary(),
 ) {
 
     val available: Boolean
@@ -25,7 +25,7 @@ class LocalModel(
         modelFile == null || !modelFile.exists() ->
             "No model found. Put a .gguf file in ~/.jordanmind/models, or set JORDANMIND_MODEL."
         resolveBinary() == null ->
-            "Found ${modelFile.name} but no llama-cli on PATH. Set JORDANMIND_LLAMA to its full path."
+            "Found ${modelFile.name} but no llama-cli. Set JORDANMIND_LLAMA to its full path."
         else ->
             "Using ${modelFile.name} via ${resolveBinary()}"
     }
@@ -77,10 +77,37 @@ class LocalModel(
     companion object {
         const val DEFAULT_SYSTEM = "You are a concise, helpful offline assistant."
 
+        /**
+         * Directory shipped alongside the application, used when the installer bundles a model and
+         * the llama.cpp runtime. Empty when running from a plain build.
+         */
+        private val bundledDir: File? by lazy {
+            val home = System.getProperty("compose.application.resources.dir") ?: return@lazy null
+            val app = File(home).parentFile ?: return@lazy null
+            val dir = File(app, "models")
+            if (dir.isDirectory) dir else null
+        }
+
         fun defaultModelFile(): File? {
             System.getenv("JORDANMIND_MODEL")?.let { return File(it) }
-            val dir = File(System.getProperty("user.home"), ".jordanmind/models")
-            return dir.listFiles { f -> f.isFile && f.name.endsWith(".gguf") }?.firstOrNull()
+            // The user's own models win, so dropping in a bigger model overrides the bundled one.
+            val userDir = File(System.getProperty("user.home"), ".jordanmind/models")
+            userDir.listFiles { f -> f.isFile && f.name.endsWith(".gguf") }
+                ?.sortedBy { it.name }
+                ?.firstOrNull()
+                ?.let { return it }
+            return bundledDir?.listFiles { f -> f.isFile && f.name.endsWith(".gguf") }
+                ?.sortedBy { it.name }
+                ?.firstOrNull()
+        }
+
+        /** Prefers a bundled llama-cli so the app works with nothing installed on the machine. */
+        fun defaultBinary(): String {
+            System.getenv("JORDANMIND_LLAMA")?.let { return it }
+            bundledDir?.listFiles { f ->
+                f.isFile && f.nameWithoutExtension.equals("llama-cli", ignoreCase = true)
+            }?.firstOrNull()?.let { return it.absolutePath }
+            return if (System.getProperty("os.name").startsWith("Windows")) "llama-cli.exe" else "llama-cli"
         }
     }
 }

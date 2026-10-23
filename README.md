@@ -28,7 +28,11 @@ CI builds all of these on every push; grab them from the **Actions** tab.
 | `JordanMind-1.1-bundled.apk` | ~624 MB | Qwen2.5-0.5B-Instruct q8 baked in. Works on first launch. |
 | `JordanMind-1.1-lite.apk` | ~77 MB | No model. Press **Install bundled**, or **Import file** to pick a `.task` from storage. Use this to run the 1.5B model instead. |
 | `JordanMind-1.1-linux.deb` | ~86 MB | Desktop app, installs to `/opt/jordan-mind`. |
-| Windows `.exe` / `.msi` | — | Built by the `windows-latest` CI job. |
+| `JordanMind-Setup-1.1.0-win64.exe` | ~100 MB | Desktop app. No model — see below. |
+| `JordanMind-Setup-1.1.0-win64-bundled.exe` | ~570 MB | Desktop app **with** Qwen2.5-0.5B q4_k_m and the llama.cpp runtime. Works offline on first launch. |
+
+Both Windows installers are produced from Linux by `packaging/windows/build-windows-installer.sh`
+(`BUNDLE_MODEL=1` for the larger one) and by the `windows-latest` CI job.
 
 Release builds are signed and minified with R8.
 

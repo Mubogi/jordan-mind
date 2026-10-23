@@ -96,6 +96,20 @@ object SelfTest {
         val url = actions.openUrl("file:///etc/passwd")
         check("refuses non-http links", !url.ok, url.message)
 
+        println("\nModel discovery")
+        val model = LocalModel()
+        println("  ${model.describe()}")
+        // Report the resolved paths so a bundled installer can be verified without a GUI.
+        val gguf = LocalModel.defaultModelFile()
+        val cli = LocalModel.defaultBinary()
+        println("  model file : ${gguf?.absolutePath ?: "(none)"}")
+        println("  llama-cli  : $cli")
+        if (System.getenv("JORDANMIND_EXPECT_MODEL") == "1") {
+            check("bundled model found", gguf != null && gguf.exists(), gguf?.absolutePath.orEmpty())
+            check("bundled llama-cli found", File(cli).canExecute(), cli)
+            check("model reports available", model.available, model.describe())
+        }
+
         println("\n${if (failures == 0) "ALL CHECKS PASSED" else "$failures CHECK(S) FAILED"}")
         root.deleteRecursively()
         return if (failures == 0) 0 else 1
