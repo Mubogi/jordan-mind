@@ -65,13 +65,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val activeModel: StateFlow<File?> = _activeModel.asStateFlow()
 
     private var generation: Job? = null
+    private var autoLoadStarted = false
 
     init {
         refreshModels()
+        autoLoadModel()
     }
 
     fun refreshModels() {
         _installed.value = models.installedModels
+    }
+
+    /**
+     * Loads a model without the user having to ask, because a chat app that starts with a disabled
+     * send button reads as broken. Prefers an already-extracted model; otherwise unpacks the one
+     * baked into the APK. Runs only once per process.
+     */
+    private fun autoLoadModel() {
+        if (autoLoadStarted) return
+        autoLoadStarted = true
+        viewModelScope.launch {
+            val installed = models.installedModels
+            if (installed.isNotEmpty()) {
+                loadModel(installed.first())
+                return@launch
+            }
+            if (models.bundledModelName() == null) {
+                // Lite build: nothing to load, so say what to do instead of sitting idle.
+                _status.value = "No model in this build — import a .task file to start chatting"
+                return@launch
+            }
+            _busy.value = true
+            models.extractBundledModel { msg -> _status.value = msg }
+                .onSuccess {
+                    refreshModels()
+                    loadModel(it)
+                }
+                .onFailure { _status.value = "Could not unpack the bundled model: ${it.message}" }
+            _busy.value = false
+        }
     }
 
     fun notify(message: String) {

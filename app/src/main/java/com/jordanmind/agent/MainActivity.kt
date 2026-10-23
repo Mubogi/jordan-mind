@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jordanmind.agent.ui.AppViewModel
+import com.jordanmind.agent.ui.theme.AuroraBackdrop
 import com.jordanmind.agent.ui.theme.JordanMindTheme
 import com.jordanmind.agent.ui.tabs.BuildTab
 import com.jordanmind.agent.ui.tabs.ChatTab
@@ -65,20 +66,24 @@ fun JordanMindRoot(vm: AppViewModel = viewModel()) {
     }
 
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            JordanTabRail(selected = tab, onSelect = { tab = it })
-            Box(Modifier.fillMaxSize()) {
-            when (tab) {
-                Tab.CHAT -> ChatTab(vm)
-                Tab.AGENT -> AgentTab(vm)
-                Tab.BUILD -> BuildTab(vm)
-                Tab.DOCS -> DocumentsTab(vm)
-                Tab.FILES -> FilesTab(vm)
-                Tab.RESEARCH -> ResearchTab(vm)
-                Tab.EXAM -> ExamTab(vm)
-            }
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+            AuroraBackdrop()
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                JordanTabRail(selected = tab, onSelect = { tab = it })
+                Box(Modifier.fillMaxSize()) {
+                    when (tab) {
+                        Tab.CHAT -> ChatTab(vm)
+                        Tab.AGENT -> AgentTab(vm)
+                        Tab.BUILD -> BuildTab(vm)
+                        Tab.DOCS -> DocumentsTab(vm)
+                        Tab.FILES -> FilesTab(vm)
+                        Tab.RESEARCH -> ResearchTab(vm)
+                        Tab.EXAM -> ExamTab(vm)
+                    }
+                }
             }
         }
     }

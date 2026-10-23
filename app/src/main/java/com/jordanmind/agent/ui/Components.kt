@@ -14,8 +14,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jordanmind.agent.ui.theme.Accent
 
 /** Page header shared by every tab. */
 @Composable
@@ -51,8 +54,8 @@ fun TabHeader(
 }
 
 /**
- * Bordered container used for every group of controls. Deliberately uses a hairline border over a
- * flat fill rather than a tonal surface — nested tonal surfaces on a dark background read as mud.
+ * Bordered container used for every group of controls. A hairline gradient edge over a flat fill
+ * reads as lit glass; nested tonal surfaces on a dark background read as mud instead.
  */
 @Composable
 fun Panel(
@@ -64,9 +67,15 @@ fun Panel(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
             .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant,
-                RoundedCornerShape(16.dp),
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    listOf(
+                        Accent.Amber.copy(alpha = 0.38f),
+                        MaterialTheme.colorScheme.outlineVariant,
+                        Color.Transparent,
+                    ),
+                ),
+                shape = RoundedCornerShape(16.dp),
             )
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
