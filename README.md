@@ -1,8 +1,8 @@
 # Jordan Mind
 
-An offline AI agent for Android. Everything — the language model, OCR, document writing,
-search — runs on the phone. The app declares no network permission, so it cannot reach the
-internet even if it wanted to.
+An offline AI agent for Android and desktop. Everything — the language model, OCR, document
+writing, search — runs on the device. The app declares no network permission, so it cannot reach
+the internet even if it wanted to.
 
 ## What it does
 
@@ -14,16 +14,23 @@ internet even if it wanted to.
 | **Files** | Browse, search, rename, delete, zip. All inside the app's own storage. |
 | **Research** | Index your own documents and ask questions against them (local RAG). |
 | **Exam** | Photograph a question, OCR it, get a step-by-step worked solution saved as PDF/Word. |
+| **Agent** | Run instructions against the device — launch apps, compose messages, set alarms, schedule reminders — and see what it has learned. |
+
+A desktop app shares the same agent core (`:core`), so planning, memory and slot filling behave
+identically on both targets.
 
 ## Install
 
-Two builds are produced:
+CI builds all of these on every push; grab them from the **Actions** tab.
 
-- `JordanMind-1.0-bundled.apk` (~665 MB) — Qwen2.5-0.5B-Instruct q8 is baked in. Install and
-  it works immediately, no model download, no setup.
-- `JordanMind-1.0-lite.apk` (~143 MB) — no model. Install, then either press **Install bundled**
-  (needs the model pushed to the device) or **Import file** to pick a `.task` / `.litertlm` from
-  storage. Use this if you want the 1.5B model instead, or want a smaller download.
+| Artifact | Size | Notes |
+|---|---|---|
+| `JordanMind-1.1-bundled.apk` | ~624 MB | Qwen2.5-0.5B-Instruct q8 baked in. Works on first launch. |
+| `JordanMind-1.1-lite.apk` | ~77 MB | No model. Press **Install bundled**, or **Import file** to pick a `.task` from storage. Use this to run the 1.5B model instead. |
+| `JordanMind-1.1-linux.deb` | ~86 MB | Desktop app, installs to `/opt/jordan-mind`. |
+| Windows `.exe` / `.msi` | — | Built by the `windows-latest` CI job. |
+
+Release builds are signed and minified with R8.
 
 Requires Android 10 (API 29) or newer. 4 GB RAM minimum; 6 GB+ recommended for the 1.5B model.
 
@@ -45,16 +52,41 @@ Larger models would need a different runtime (llama.cpp / GGUF), which is not wi
 ## Building
 
 ```bash
-./build.sh                      # APK with no bundled model
-./build.sh /path/to/model.task  # APK with the model baked into assets/models/
+./gradlew assembleRelease                                     # APK, no bundled model
+./gradlew assembleRelease -PbundleModel=/path/to/model.task   # model baked into assets/models/
+./gradlew :desktop:createReleaseDistributable                 # desktop app
+./gradlew :desktop:packageReleaseDeb                          # Linux .deb (needs fakeroot)
 ```
+
+On Windows, `./gradlew :desktop:packageReleaseExe` produces the `.exe` and `.msi`. This cannot be
+cross-compiled from Linux — `jpackage` links a native launcher and runtime for the target OS.
 
 Requires JDK 21 and an Android SDK with platform 36 and build-tools 36.0.0. Point
 `local.properties` at your SDK, or set `ANDROID_HOME`.
 
 ```bash
-gradle testDebugUnitTest        # unit tests for the embedder and project generator
+./gradlew testDebugUnitTest :core:test :desktop:test   # 64 tests
 ```
+
+The packaged desktop app can verify itself without a display:
+
+```bash
+"desktop/build/compose/binaries/main-release/app/Jordan Mind/bin/Jordan Mind" --selftest
+```
+
+It exercises planning, learning, memory, article export, persistence across a restart, and the
+path-traversal guards.
+
+## Privacy
+
+There is no networking code in this project. The Android manifest removes `INTERNET` and
+`ACCESS_NETWORK_STATE` outright, verifiable on any build:
+
+```bash
+aapt2 dump badging app-release.apk | grep -i internet   # prints nothing
+```
+
+Conversations, reminders, facts and drafts are stored on the device only.
 
 ## Honest limitations
 
@@ -68,3 +100,9 @@ gradle testDebugUnitTest        # unit tests for the embedder and project genera
   Fully offline dictation would need bundled Vosk weights (~50 MB), deliberately left out.
 - **Retrieval is lexical, not neural.** The RAG embedder is a hashed bag-of-words with cosine
   similarity — fast and dependency-free, but it matches wording, not meaning.
+- **"Learning" means remembering instruction-to-action mappings**, not training the model. No
+  weights are ever modified; the model is fixed and read-only.
+- **Desktop actions are sandboxed** to the user's home directory, and links are restricted to
+  `http(s)`.
+- **Gemma 3 1B cannot be bundled.** It is gated behind a signed licence and returns HTTP 401 to
+  unattended downloads.
