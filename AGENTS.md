@@ -1,0 +1,110 @@
+# AGENTS.md
+
+Repository knowledge for future sessions. Everything here was verified in this environment.
+
+## What this project is
+
+Jordan Mind — an offline AI agent that runs on an Android phone and on a desktop. Three Gradle
+modules:
+
+| Module | What it is |
+| --- | --- |
+| `:app` | Android app (Compose, Material 3, dark-only amber theme) |
+| `:core` | Pure Kotlin/JVM agent state, no Android APIs, shared by both |
+| `:desktop` | Compose Desktop app + headless `--selftest` mode |
+
+`:core` is deliberately free of Android dependencies so the desktop app and the JVM tests can use
+the same logic. Anything both targets need belongs there, not duplicated.
+
+## Toolchain (this sandbox)
+
+There is no JDK 17 installed, so **do not pin `jvmToolchain(17)`** — Gradle cannot resolve it and
+fails with "Cannot find a Java installation". The modules compile with the JDK 21 that exists.
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64   # 21.0.12.1
+export ANDROID_HOME=/workspace/android-sdk
+export PATH=$JAVA_HOME/bin:$PATH
+GRADLE=/workspace/tools/gradle-8.14.6/bin/gradle      # or ./gradlew
+```
+
+Builds are slow (2–3 min) and run in the background with `nohup ... &`, then poll the log.
+
+## Commands
+
+```bash
+# all tests (64 tests: core, planner, time parsing, UI smoke)
+./gradlew testDebugUnitTest :core:test :desktop:test
+
+# release APK, no model bundled
+./gradlew assembleRelease
+
+# release APK with a model baked into assets/models/qwen-bundled.task
+./gradlew assembleRelease -PbundleModel=/path/to/model.task
+
+# Android lint (fails the build on errors — keep it clean)
+./gradlew lintRelease
+
+# desktop: runnable image, .deb, Windows installers
+./gradlew :desktop:createReleaseDistributable :desktop:packageReleaseDeb
+./gradlew :desktop:packageReleaseExe :desktop:packageReleaseMsi   # Windows host only
+
+# verify a packaged desktop binary end to end, no display needed
+"desktop/build/compose/binaries/main-release/app/Jordan Mind/bin/Jordan Mind" --selftest
+```
+
+## Things that will bite you
+
+- **Bundling a model needs a task dependency on lint.** `stageBundledModel` writes into
+  `app/build/bundled-assets`, which lint reads. Without an explicit `dependsOn`, Gradle fails with
+  an implicit-dependency error that never mentions the model. The fix matches task names
+  case-insensitively (`lintVitalAnalyzeRelease` is lowercase `lint`).
+- **Model assets must stay uncompressed.** MediaPipe mmaps the `.task` file, so `noCompress` must
+  include `task`/`litertlm`/`bin`/`gguf`. Verify with a zipfile check: the entry should be `STORED`
+  and byte-identical to the source.
+- **Compose Desktop ProGuard is disabled.** The Compose plugin bundles ProGuard 7.2.2, which cannot
+  read JDK 21 class files (`proguardReleaseJars` fails with an `IOException`). See the
+  `buildTypes.release.proguard` block in `desktop/build.gradle.kts`.
+- **`jpackage` needs `fakeroot`** for `.deb` output. `sudo apt-get install -y fakeroot`.
+- **Do not read `StateFlow.value` in composition.** Lint fails the build with
+  `StateFlowValueCalledInComposition`, and the real consequence is a button that never
+  re-enables. Use `collectAsStateWithLifecycle()`.
+- **`libs.versions.toml` needs a blank line before `[plugins]`** or the TOML parser merges the
+  last library entry into the section header.
+- **Plugin versions must be declared once in the root `build.gradle.kts`** with `apply false`, then
+  applied without a version in modules. Applying a versioned plugin in two modules fails with
+  "already on the classpath with an unknown version".
+
+## Agent design
+
+Instruction handling is two-stage, cheapest first (`Planner`):
+
+1. Memory: an exact or ≥0.75-similarity match on a stored pattern. No model call.
+2. Templates: regex rules for common phrasings. No model call.
+3. Model: asked for strict JSON. The resulting mapping is written back to memory.
+
+This ordering is what makes the agent work with **no model loaded at all**, and why learned
+instructions get faster over time. "Learning" is template memorisation, not weight training —
+do not describe it as training the model.
+
+Slot filling compiles the stored template into a regex (`AgentState.extractSlots`). Do not go back
+to guessing word boundaries: it silently mangles multi-slot patterns like
+`remind me to {task} at {time}`.
+
+## Honest limits (do not claim otherwise)
+
+- The app declares **no `INTERNET` permission** and there is no network code. Anything that needs
+  the network cannot work.
+- SMS opens a pre-filled composer; it never sends silently.
+- Scheduled posts fire a notification. An offline app cannot publish to a blog.
+- Desktop actions refuse paths outside `user.home` and non-`http(s)` links.
+- The bundled model is Qwen2.5-0.5B-Instruct q8 (~547 MB). Qwen2.5-1.5B q8 (~1.6 GB) is a
+  drop-in upgrade via `-PbundleModel`. Gemma3-1B is gated and returns HTTP 401 without a signed
+  license, so it cannot be fetched unattended.
+
+## Verified state
+
+- 64 unit tests pass; `lintRelease` is clean.
+- Release APK: 77 MB (no model) / 624 MB (bundled), signed, `apksigner verify` OK.
+- Desktop `.deb` installs and the installed binary passes all 19 `--selftest` checks.
+- Windows `.exe`/`.msi` require the `windows-latest` CI job — `jpackage` cannot cross-compile.
