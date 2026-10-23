@@ -177,3 +177,41 @@ Build-output rules must be anchored. An unanchored `build/` also matches the sou
 from the repository — local builds passed because the file was on disk, and only CI (a fresh
 clone) failed. Use `/build/`, `/app/build/`, and so on. Run
 `git ls-files --others --exclude-standard` before trusting a push.
+
+## Device tuning and what not to add
+
+`DeviceProfile` picks a working set from the device's RAM at startup (lean <=4 GB: 1024-token
+context, 384-token reply; balanced <=6 GB: 1536/512; capable: 2048/768) and `LlmEngine.load`
+enforces the ceiling, so an oversized context cannot be allocated even if a settings file asks for
+one. That allocation is what gets the process killed on a 4 GB phone, and it presents as "the app
+keeps stopping".
+
+Do not add a thread-count setting. MediaPipe's own thread pool already reads
+`/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq` and sizes itself to the fast cluster, and
+`LlmInferenceOptions.Builder` exposes no override (`setNumThreads` does not exist — check the AAR
+before assuming). A knob there would be a control that does nothing.
+
+The `AuroraBackdrop` drift stops when the app leaves the foreground and is pinned still on lean
+devices. An infinite animation is never considered idle, so leaving it on kept the whole UI
+recomposing and the GPU busy behind other apps.
+
+## Release
+
+`packaging/release.sh` pushes, tags, creates the release and uploads all four assets. It needs a
+token with `repo` scope in `GITHUB_TOKEN`; it verifies the token up front and fails with "Bad
+credentials" rather than a confusing 404. Note the naming convention: APKs use the short version
+(`1.2`) while the tag and Windows installers use the full one (`1.2.0`). Both are derived from
+`app/build.gradle.kts`, so do not pass them by hand.
+
+## Test variants
+
+`./gradlew test` runs both the debug and release unit-test variants. The Compose test manifest
+(`androidx.compose.ui:ui-test-manifest`) is a `debugImplementation`, so `ActivityScenario` cannot
+resolve the stub activity in the release variant and the whole Robolectric UI suite fails there.
+`app/build.gradle.kts` excludes `UiSmokeTest` and `ScreenshotTest` from release only. Without that
+exclusion the suite reports ten failures that do not exist in the debug build.
+
+Windows installers are built with `VERSION=1.2.0 bash packaging/windows/build-windows-installer.sh`
+(add `BUNDLE_MODEL=1` for the offline one). The script downloads ~1 GB on a cold cache, so run it
+detached (`setsid nohup ... &`) — a foreground run can be cut off by the terminal idle timeout and
+leave a half-written installer in `dist/`.
