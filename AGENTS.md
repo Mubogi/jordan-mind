@@ -130,6 +130,13 @@ Gotchas:
 - The launcher must set `-Dskiko.library.path` to the directory holding the DLL.
 - Verify without Windows: `7z x` the installer and run the payload's `java.exe` under Wine with
   `--selftest`. Wine 10 runs the Temurin JRE and the app's headless self-test fine.
+- `BUNDLE_MODEL=1` stages a Qwen2.5-0.5B GGUF and the llama.cpp Windows build into `app/models/`,
+  producing a `-bundled` installer that works offline with nothing installed. `LocalModel` looks
+  there first, then `~/.jordanmind/models`. Downloads are cached in `packaging/windows/.cache/`
+  so repeat builds skip ~1 GB of fetching.
+- Wine limit: `llama-cli.exe` loads a model under Wine but never finishes generating tokens, so
+  bundled-model *discovery* can be verified there but generated text cannot. Confirm real output
+  on Windows. Do not claim the offline model was tested end to end from Wine alone.
 - `apt-get install wine64` removed the system JDK in this environment once. If `java` vanishes,
   reinstall `openjdk-21-jdk-headless`.
 
