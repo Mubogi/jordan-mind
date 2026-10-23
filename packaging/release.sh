@@ -76,8 +76,16 @@ for asset in "${assets[@]}"; do
 done
 
 # ---------------------------------------------------------------- push
+# Authentication goes through a throwaway credential file rather than the remote URL, so the token
+# never lands in argv (visible in `ps`) or in .git/config.
+CRED="$(mktemp)"
+trap 'rm -f "$CRED"' EXIT
+chmod 600 "$CRED"
+printf 'https://x-access-token:%s@github.com\n' "$GITHUB_TOKEN" > "$CRED"
+push_with_token() { git -c credential.helper="store --file=$CRED" push "$@"; }
+
 say "Pushing $(git rev-parse --abbrev-ref HEAD) to origin"
-git push origin HEAD || die "push failed"
+push_with_token origin HEAD || die "push failed"
 
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   say "Tag $TAG already exists locally; moving it to HEAD"
@@ -86,7 +94,7 @@ else
   say "Tagging $TAG"
   git tag "$TAG"
 fi
-git push origin "refs/tags/$TAG" --force || die "tag push failed"
+push_with_token origin "refs/tags/$TAG" --force || die "tag push failed"
 
 # ---------------------------------------------------------------- release
 NOTES="$(cat <<EOF
