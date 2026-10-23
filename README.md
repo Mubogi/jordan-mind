@@ -49,20 +49,32 @@ Android is dark-only by design. Full-size images are in `docs/screenshots/androi
 
 ## Install
 
-CI builds the APK and the Linux and Windows desktop packages on every push; grab them from the
-**Actions** tab. These are the names CI actually publishes:
+Two APKs are built from this source:
 
-| CI artifact | Contents | Notes |
+| APK | Size | Works offline on first launch? |
 |---|---|---|
-| `JordanMind-android-apk` | `app-release.apk`, ~77 MB | No model bundled. Signed with the release keystore. |
-| `JordanMind-windows` | `Jordan Mind-1.0.0.exe`, `.msi` | Desktop app, no model. Built by the `windows-latest` job. |
-| `JordanMind-linux` | `.deb` and a runnable app image | Installs to `/opt/jordan-mind`. |
+| `JordanMind-1.1-bundled.apk` | ~595 MB | Yes. Qwen2.5-0.5B q8 is inside; the app unpacks and loads it on first start. |
+| `JordanMind-1.1-lite.apk` | ~73 MB | No. It has no model, so import a `.task` from **Chat → Import file** before chatting. |
 
-The Android app ships without a model so the download stays small. Install one from **Settings**:
-pick a `.task` file on the device, or fetch one on a machine that has network access. Qwen2.5-0.5B
-is ~521 MB and runs on 4 GB devices; 1.5B is ~1.6 GB and wants 6 GB+.
+Download the bundled one if you want to install and immediately talk to it. Download the lite one
+only if you already have a `.task` file and would rather not pull 595 MB. Both are version 1.1
+(versionCode 2).
 
-To get an offline-from-first-launch Windows installer, run the cross-build script from Linux:
+> Version 1.0 had a real defect: it never loaded a model, so the chat input stayed disabled and the
+> app looked broken. 1.1 loads a model at startup and says what to do when it cannot find one.
+
+The APK is signed with a self-signed key, so Android will ask you to allow installation from
+unknown sources before it will sideload.
+
+Requires Android 10 (API 29) or newer. 4 GB RAM minimum.
+
+### Desktop
+
+CI publishes `JordanMind-windows` (a `.exe` and `.msi` built on `windows-latest`) and
+`JordanMind-linux` (a `.deb` plus a runnable app image). The desktop app loads GGUF models from
+`~/.jordanmind/models/` through an external `llama-cli`.
+
+To get a Windows installer that works offline from first launch, run the cross-build from Linux:
 
 ```bash
 packaging/windows/build-windows-installer.sh                 # ~100 MB, no model
@@ -70,15 +82,10 @@ BUNDLE_MODEL=1 packaging/windows/build-windows-installer.sh  # ~570 MB, model + 
 ```
 
 `BUNDLE_MODEL=1` stages Qwen2.5-0.5B q4_k_m and the llama.cpp Windows build, so the installed app
-answers offline with nothing else installed. It is not wired into CI because it downloads ~1 GB of
-model weights per run.
+answers with nothing else installed. It is not wired into CI because it downloads ~1 GB of model
+weights per run.
 
 Release builds are signed and minified with R8.
-
-The APK is signed with a self-signed key, so Android will ask you to allow installation from
-unknown sources before it will sideload.
-
-Requires Android 10 (API 29) or newer. 4 GB RAM minimum; 6 GB+ recommended for the 1.5B model.
 
 ## Models
 
