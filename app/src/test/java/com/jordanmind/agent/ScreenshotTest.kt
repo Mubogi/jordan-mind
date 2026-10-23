@@ -5,9 +5,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.jordanmind.agent.ui.MarkdownText
 import com.jordanmind.agent.ui.TabRailTestTag
 import com.jordanmind.agent.ui.theme.JordanMindTheme
 import org.junit.Rule
@@ -76,4 +81,39 @@ class ScreenshotTest {
         compose.onNodeWithText("Jordan Mind").assertExists()
         capture("00-theme")
     }
+
+    /**
+     * Captures the markdown reader with a reply shaped like the ones this model produces. The
+     * empty-model screenshots above only show the setup panel, so without this there is no image of
+     * what an answer actually looks like.
+     */
+    @Test
+    fun `renders a markdown reply`() {
+        compose.setContent {
+            JordanMindTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    Column(Modifier.padding(16.dp)) {
+                        MarkdownText(SAMPLE_REPLY)
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        capture("08-markdown")
+    }
 }
+
+private val SAMPLE_REPLY = """
+    ## Retry the upload
+
+    The failure is a **400**, not a size limit, so the file itself is fine. Two things to check:
+
+    1. Send the body as `multipart/form-data` rather than a raw stream
+    2. Retry once before surfacing the error
+
+    ```bash
+    gh release upload v1.2.0 build/app-release.apk --clobber
+    ```
+
+    > The token needs `repo` scope or the upload is rejected before it starts.
+""".trimIndent()

@@ -215,3 +215,21 @@ Windows installers are built with `VERSION=1.2.0 bash packaging/windows/build-wi
 (add `BUNDLE_MODEL=1` for the offline one). The script downloads ~1 GB on a cold cache, so run it
 detached (`setsid nohup ... &`) — a foreground run can be cut off by the terminal idle timeout and
 leave a half-written installer in `dist/`.
+
+## Release uploads must use the gh CLI
+
+A `curl --data-binary` POST to `uploads.github.com` is answered with
+`{"message":"Multipart form data required"}` and HTTP 400 for **every** asset, at every size — it is
+a request-shape rejection, not a size or timeout problem. `Expect:` stripping, `--upload-file` and a
+`PUT` all fail the same way. Use `gh release upload "$TAG" "$asset" --clobber --repo "$REPO"`, which
+frames the multipart body and retries. `packaging/release.sh` does this; do not "simplify" it back to
+curl. Note that `gh` reads the token from `GH_TOKEN` (or `GITHUB_TOKEN`), so export it before calling.
+
+## Markdown rendering
+
+Assistant replies are rendered by `ui/Markdown.kt`, a hand-written reader for the block types this
+model emits (headings, lists, quotes, dividers, fenced code). It is deliberately not a Markdown
+library. `MarkdownTest` pins the behaviour, including the rule that an unterminated code fence must
+still render its body — the model is usually mid-stream when that happens. When adding a block type,
+add a parser case, a renderer branch and a test; unknown input must fall through to a paragraph
+rather than being dropped.

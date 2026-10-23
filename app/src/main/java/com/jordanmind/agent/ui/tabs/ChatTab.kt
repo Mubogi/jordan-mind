@@ -29,7 +29,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -56,7 +58,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +70,7 @@ import com.jordanmind.agent.tools.Voice
 import com.jordanmind.agent.ui.AppViewModel
 import com.jordanmind.agent.ui.ChatMessage
 import com.jordanmind.agent.ui.Badge
+import com.jordanmind.agent.ui.MarkdownText
 import com.jordanmind.agent.ui.SectionLabel
 import com.jordanmind.agent.ui.TabHeader
 import com.jordanmind.agent.ui.theme.Accent
@@ -194,6 +199,12 @@ fun ChatTab(vm: AppViewModel) {
                     Icon(Icons.Filled.Stop, contentDescription = "Stop")
                 }
             } else {
+                // Regenerate is only meaningful once there is a reply to replace.
+                if (messages.any { it.role == ChatMessage.Role.ASSISTANT && it.text.isNotBlank() }) {
+                    IconButton(onClick = { vm.regenerate() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Regenerate reply")
+                    }
+                }
                 val canSend = input.isNotBlank() && state is LlmState.Ready
                 Box(
                     Modifier
@@ -273,6 +284,7 @@ private fun ChatHeader(state: LlmState, busy: Boolean, onNew: () -> Unit) {
 @Composable
 private fun MessageBubble(message: ChatMessage) {
     val isUser = message.role == ChatMessage.Role.USER
+    val clipboard = LocalClipboardManager.current
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -323,13 +335,38 @@ private fun MessageBubble(message: ChatMessage) {
         ) {
             Column {
                 if (message.text.isNotBlank()) {
-                    Text(
-                        text = message.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isUser) Color(0xFF241A00) else MaterialTheme.colorScheme.onSurface,
-                    )
+                    if (isUser) {
+                        Text(
+                            text = message.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF241A00),
+                        )
+                    } else {
+                        // Assistant replies are markdown: a phone-sized model emits headings,
+                        // lists and fenced code, and flat text is what makes it read as a form.
+                        MarkdownText(message.text)
+                    }
                 }
                 if (message.streaming) TypingDots()
+                // Copy is offered only on a finished reply; mid-stream text is still changing.
+                if (!isUser && !message.streaming && message.text.isNotBlank()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        IconButton(
+                            onClick = { clipboard.setText(AnnotatedString(message.text)) },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.ContentCopy,
+                                contentDescription = "Copy reply",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -8,7 +8,7 @@ the internet even if it wanted to.
 
 | Tab | Capability |
 |---|---|
-| **Chat** | Streaming conversation with a local Qwen model. Dictation and spoken replies. |
+| **Chat** | Streaming conversation with a local Qwen model, rendered as Markdown. Dictation and spoken replies. |
 | **Build** | Generates complete, compilable Android projects from six templates, exportable as a ZIP. |
 | **Docs** | Writes PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx) and text files. |
 | **Files** | Browse, search, rename, delete, zip. All inside the app's own storage. |
@@ -83,6 +83,20 @@ exposes no override, so a knob here would be a lie.
 
 The background gradient stops animating whenever the app is not on screen. An infinite animation is
 never idle, so leaving it running kept the whole UI recomposing and the GPU busy in the background.
+
+### Markdown replies
+
+Answers are rendered, not dumped. Headings, bulleted and numbered lists, block quotes, dividers and
+fenced code all get their own treatment, and inline `code` and **bold** keep their formatting.
+
+Code blocks are the part that matters: they scroll horizontally instead of wrapping, so a command
+stays readable, and each one carries a copy button. Every finished reply also has a copy button, and
+the composer offers **regenerate** to re-run the last question.
+
+The parser is a small hand-written reader over the subset a phone-sized model actually emits rather
+than a full Markdown library, because tables, embedded HTML and reference links would add a parser
+and an HTML renderer for output this model never produces. Anything it does not recognise falls
+through to a plain paragraph, so malformed output still renders as text instead of disappearing.
 
 ### Work mode
 

@@ -251,6 +251,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _messages.value = emptyList()
     }
 
+    /**
+     * Re-runs the last user turn. The previous assistant reply is dropped first so the transcript
+     * does not accumulate two answers to one question, and the model is not re-fed its own reply.
+     */
+    fun regenerate() {
+        if (generation?.isActive == true) return
+        val current = _messages.value
+        val lastUser = current.indexOfLast { it.role == ChatMessage.Role.USER }
+        if (lastUser < 0) return
+        val prompt = current[lastUser].text
+        _messages.value = current.subList(0, lastUser).toList()
+        send(prompt)
+    }
+
     private fun updateAt(index: Int, text: String, streaming: Boolean) {
         val current = _messages.value.toMutableList()
         if (index in current.indices) {

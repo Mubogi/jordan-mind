@@ -169,25 +169,16 @@ else
 fi
 
 # ---------------------------------------------------------------- upload
-# GitHub rejects a second asset with the same name, so an existing one is removed first. That is
-# what makes re-running this script safe after a partial upload.
-for asset in "${assets[@]}"; do
-  name="$(basename "$asset")"
-  existing="$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" "$API/releases/tags/$TAG" \
-    | jq -r --arg n "$name" '.assets[] | select(.name == $n) | .id')"
-  if [ -n "$existing" ]; then
-    say "Replacing existing asset $name"
-    curl -fsS -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-      "$API/releases/assets/$existing" >/dev/null || die "could not remove the old $name"
-  fi
+# Uploads go through the gh CLI. A plain `curl --data-binary` POST to uploads.github.com is
+# answered with "Multipart form data required" (HTTP 400) for every asset size, and `gh` already
+# handles the multipart framing, the retry and the chunking that the large APKs need.
+command -v gh >/dev/null || die "gh (GitHub CLI) is required for uploads"
+export GH_TOKEN="$GITHUB_TOKEN"
 
-  say "Uploading $name"
-  curl -fsS -X POST \
-    -H "Authorization: Bearer $GITHUB_TOKEN" \
-    -H "Content-Type: application/octet-stream" \
-    --data-binary "@$asset" \
-    "https://uploads.github.com/repos/$REPO/releases/tags/$TAG/assets?name=$name" \
-    >/dev/null || die "upload of $name failed"
+for asset in "${assets[@]}"; do
+  say "Uploading $(basename "$asset")"
+  gh release upload "$TAG" "$asset" --clobber --repo "$REPO" >/dev/null \
+    || die "upload of $(basename "$asset") failed"
 done
 
 say "Done: https://github.com/$REPO/releases/tag/$TAG"
