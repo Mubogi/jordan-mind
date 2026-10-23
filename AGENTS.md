@@ -154,7 +154,21 @@ Gotchas:
   (`-st` plus a closed stdin) and covered by `LocalModelTest`. Re-verify end to end under Wine
   before claiming the bundled model generates text on Windows.
 - `apt-get install wine64` removed the system JDK in this environment once. If `java` vanishes,
-  reinstall `openjdk-21-jdk-headless`.
+  reinstall `openjdk-21-jdk-headless` (the package needs a fresh `apt-get update` first).
+- The container image is rebuilt between sessions and drops tools that a previous session relied
+  on. Seen so far: `openjdk-21-jdk-headless`, `imagemagick`, `unzip`. Reinstall before assuming a
+  script failure is a code failure.
+- `llama-cli` lives at `/workspace/llm/llama-b11829/llama-cli` (not the `/workspace/lim/...` path
+  recorded earlier). Set `JORDANMIND_LLAMA` to it when testing the desktop model path, and put a
+  GGUF in `~/.jordanmind/models/`.
+
+## First-launch model loading
+
+A chat UI whose send button is gated on `LlmState.Ready` is dead on arrival if nothing loads a
+model. The 1.0 APK shipped exactly that: `AppViewModel.init` only listed models on disk, and the
+lite APK contains no model to list. `autoLoadModel()` now loads an installed model or unpacks the
+bundled one, and `ModelAutoLoadTest` fails if that regresses. When changing startup, run that test
+with the fix reverted to confirm it still bites.
 
 ## .gitignore trap
 
