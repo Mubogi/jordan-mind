@@ -20,22 +20,41 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      - name: Verify the Android SDK is available
+        # The runner image already ships an Android SDK. The setup-android action is deliberately
+        # not used: its bundled sdkmanager rejects the legacy 'tools' package and fails the job.
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" | tail -3
+          ls "$ANDROID_HOME/build-tools" | tail -3
 
       - name: Unit tests (shared core, planner, agent, UI smoke)
         run: ./gradlew testDebugUnitTest --no-daemon
 
-      - name: Generate a release keystore
-        # Only for CI artifacts. Real releases should supply a keystore through secrets so the
-        # signing identity stays stable across builds.
+      - name: Restore the release keystore
+        # Prefer a keystore supplied through secrets so the signing identity is stable across
+        # builds. Without one, generate a throwaway so the artifact is still installable.
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
           mkdir -p keystore
-          keytool -genkeypair -v -keystore keystore/release.jks -alias jordanmind \
-            -keyalg RSA -keysize 4096 -validity 10000 \
-            -storepass jordanmind -keypass jordanmind \
-            -dname "CN=Jordan Mind, OU=Offline Agent, O=Jordan Mind, L=Nairobi, C=KE"
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > keystore/release.jks
+            echo "Using the keystore from secrets."
+          else
+            echo "No RELEASE_KEYSTORE_BASE64 secret set; generating a throwaway keystore."
+            keytool -genkeypair -v -keystore keystore/release.jks -alias jordanmind \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass jordanmind -keypass jordanmind \
+              -dname "CN=Jordan Mind, OU=Offline Agent, O=Jordan Mind, L=Nairobi, C=KE"
+          fi
 
       - name: Build release APK
+        env:
+          RELEASE_STORE_FILE: ${{ github.workspace }}/keystore/release.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD || 'jordanmind' }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS || 'jordanmind' }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD || 'jordanmind' }}
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Verify the APK is signed and declares no network permission

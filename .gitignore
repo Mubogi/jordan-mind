@@ -27,3 +27,8 @@ models/
 # OS
 .DS_Store
 Thumbs.db
+
+# Windows packaging work directories
+packaging/windows/.work/
+packaging/windows/dist/
+packaging/windows/JordanMind.exe
